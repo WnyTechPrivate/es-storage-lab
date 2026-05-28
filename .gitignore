@@ -1,0 +1,43 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# --- Node / Vite ---
+node_modules/
+dist/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# --- This tool's runtime data ---
+# SQLite DB (runs / measurements) — local state, not source
+webapp/backend/app/db/store.sqlite
+webapp/backend/app/db/store.sqlite-*
+# generated raw inputs per run
+webapp/backend/runs/
+
+# --- Legacy CLI artifacts (kept locally, not committed) ---
+results/
+data/raw_sample.log
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example

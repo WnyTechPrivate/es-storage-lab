@@ -1,0 +1,10 @@
+{
+  "description": "raw_ingest: read message line into event.original, set @timestamp from ingest time",
+  "processors": [
+    { "rename": { "field": "message", "target_field": "event.original", "ignore_missing": true } },
+    { "set":    { "field": "@timestamp", "value": "{{{_ingest.timestamp}}}", "override": false } }
+  ],
+  "on_failure": [
+    { "set": { "field": "error.message", "value": "{{{_ingest.on_failure_message}}}" } }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "description": "parsing2_full_service: grok web Access/Req/Error line into ECS fields, keep event.original",
+  "processors": [
+    {
+      "grok": {
+        "field": "event.original",
+        "patterns": [
+          "%{IPORHOST:source.ip} - - \\[%{HTTPDATE:_ts}\\] Error \"%{WORD:http.request.method} %{NOTSPACE:url.original} HTTP/[\\d.]+\" %{NUMBER:http.response.status_code:long} %{NUMBER:http.response.body.bytes:long} \"(?:-|%{DATA:http.request.referrer})\" \"(?:-|%{DATA:user_agent.original})\" %{GREEDYDATA:_kvstr}",
+          "%{IPORHOST:source.ip} - - \\[%{HTTPDATE:_ts}\\] (?<_evtype>Access|Req) \"%{WORD:http.request.method} %{NOTSPACE:url.original} HTTP/[\\d.]+\" %{NUMBER:http.response.status_code:long} %{GREEDYDATA:_kvstr}"
+        ],
+        "ignore_failure": false
+      }
+    },
+    {
+      "date": {
+        "field": "_ts",
+        "formats": ["dd/MMM/yyyy:HH:mm:ss Z"],
+        "timezone": "UTC",
+        "ignore_failure": true
+      }
+    },
+    {
+      "kv": {
+        "field": "_kvstr",
+        "field_split": " ",
+        "value_split": "=",
+        "target_field": "_kv",
+        "trim_value": " \"",
+        "ignore_missing": true,
+        "ignore_failure": true
+      }
+    },
+
+    { "set": { "field": "_evtype", "value": "Error", "override": false, "if": "ctx?.http?.response?.body?.bytes != null" } },
+
+    {
+      "script": {
+        "lang": "painless",
+        "ignore_failure": true,
+        "source": "String t = ctx?._evtype; if (t == 'Access')      { ctx.event = (ctx.event ?: new HashMap()); ctx.event.action = 'access';  ctx.event.category = ['web']; ctx.event.kind = 'event'; } else if (t == 'Req') { ctx.event = (ctx.event ?: new HashMap()); ctx.event.action = 'request'; ctx.event.category = ['web']; ctx.event.kind = 'event'; } else if (t == 'Error') { ctx.event = (ctx.event ?: new HashMap()); ctx.event.action = 'error'; ctx.event.category = ['web']; ctx.event.kind = 'event'; ctx.event.outcome = 'failure'; }"
+      }
+    },
+    { "set": { "field": "event.dataset", "value": "web.access" } },
+    { "set": { "field": "event.module",  "value": "web" } },
+
+    { "set":     { "field": "client.ip",   "copy_from": "source.ip",   "ignore_empty_value": true } },
+    { "lowercase": { "field": "http.request.method", "ignore_missing": true } },
+
+    { "set": { "field": "user.id",                 "copy_from": "_kv.user\\.id",         "ignore_empty_value": true } },
+    { "set": { "field": "user.name",               "copy_from": "_kv.user\\.name",       "ignore_empty_value": true } },
+    { "set": { "field": "source.geo.country_iso_code", "copy_from": "_kv.src\\.geo\\.country", "ignore_empty_value": true } },
+    { "set": { "field": "source.geo.city_name",        "copy_from": "_kv.src\\.geo\\.city",    "ignore_empty_value": true } },
+    { "set": { "field": "user_agent.os.name",      "copy_from": "_kv.os\\.name",         "ignore_empty_value": true } },
+    { "set": { "field": "user_agent.name",         "copy_from": "_kv.browser\\.name",    "ignore_empty_value": true } },
+    { "set": { "field": "service.name",            "copy_from": "_kv.service",           "ignore_empty_value": true } },
+    { "set": { "field": "trace.id",                "copy_from": "_kv.trace\\.id",        "ignore_empty_value": true } },
+    { "set": { "field": "transaction.id",          "copy_from": "_kv.transaction\\.id",  "ignore_empty_value": true } },
+    { "set": { "field": "error.type",              "copy_from": "_kv.error_category",    "ignore_empty_value": true } },
+    { "set": { "field": "error.code",              "copy_from": "_kv.issue_type",        "ignore_empty_value": true } },
+
+    { "convert": { "field": "_kv.rt", "type": "float", "target_field": "_rt_sec", "ignore_missing": true } },
+    {
+      "script": {
+        "lang": "painless",
+        "ignore_failure": true,
+        "source": "if (ctx?._rt_sec instanceof Number) { ctx.event = (ctx.event ?: new HashMap()); ctx.event.duration = (long)(((Number)ctx._rt_sec).doubleValue() * 1000000000.0); }"
+      }
+    },
+    { "set": { "field": "destination.address", "copy_from": "_kv.upstream_addr", "ignore_empty_value": true } },
+
+    { "remove": { "field": ["_kv", "_kvstr", "_ts", "_evtype", "_rt_sec"], "ignore_missing": true } }
+  ],
+  "on_failure": [
+    { "set": { "field": "error.message", "value": "{{{_ingest.on_failure_message}}}" } }
+  ]
+}

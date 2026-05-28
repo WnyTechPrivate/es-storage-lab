@@ -1,0 +1,10 @@
+{
+  "description": "parsing3_parsed_only_snmp: parse like parsing2_full_snmp, then drop event.original",
+  "processors": [
+    { "pipeline": { "name": "parsing2_full_snmp" } },
+    { "remove":   { "field": "event.original", "ignore_missing": true } }
+  ],
+  "on_failure": [
+    { "set": { "field": "error.message", "value": "{{{_ingest.on_failure_message}}}" } }
+  ]
+}

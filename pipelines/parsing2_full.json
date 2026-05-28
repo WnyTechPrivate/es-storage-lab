@@ -1,0 +1,102 @@
+{
+  "description": "parsing2_full: KV parse Fortinet traffic line into ECS fields, keep event.original",
+  "processors": [
+    {
+      "dissect": {
+        "field": "event.original",
+        "pattern": "%{} %{} %{} %{} %{} %{} %{_kvstr}",
+        "ignore_failure": false
+      }
+    },
+    {
+      "kv": {
+        "field": "_kvstr",
+        "field_split": " ",
+        "value_split": "=",
+        "target_field": "_kv",
+        "trim_value": " ",
+        "ignore_missing": true,
+        "ignore_failure": false
+      }
+    },
+    { "set": { "field": "source.ip",      "copy_from": "_kv.srcip",  "ignore_empty_value": true } },
+    { "set": { "field": "destination.ip", "copy_from": "_kv.dstip",  "ignore_empty_value": true } },
+
+    { "convert": { "field": "_kv.srcport",  "type": "long", "target_field": "source.port",        "ignore_missing": true } },
+    { "convert": { "field": "_kv.dstport",  "type": "long", "target_field": "destination.port",   "ignore_missing": true } },
+    { "convert": { "field": "_kv.sentbyte", "type": "long", "target_field": "source.bytes",       "ignore_missing": true } },
+    { "convert": { "field": "_kv.rcvdbyte", "type": "long", "target_field": "destination.bytes",  "ignore_missing": true } },
+    { "convert": { "field": "_kv.sentpkt",  "type": "long", "target_field": "source.packets",     "ignore_missing": true } },
+    { "convert": { "field": "_kv.rcvdpkt",  "type": "long", "target_field": "destination.packets","ignore_missing": true } },
+    { "convert": { "field": "_kv.duration", "type": "long", "target_field": "_dur_sec",           "ignore_missing": true } },
+
+    { "set": { "field": "client.ip",      "copy_from": "source.ip",      "ignore_empty_value": true } },
+    { "set": { "field": "client.port",    "copy_from": "source.port",    "ignore_empty_value": true } },
+    { "set": { "field": "client.bytes",   "copy_from": "source.bytes",   "ignore_empty_value": true } },
+    { "set": { "field": "client.packets", "copy_from": "source.packets", "ignore_empty_value": true } },
+    { "set": { "field": "server.ip",      "copy_from": "destination.ip",      "ignore_empty_value": true } },
+    { "set": { "field": "server.port",    "copy_from": "destination.port",    "ignore_empty_value": true } },
+    { "set": { "field": "server.bytes",   "copy_from": "destination.bytes",   "ignore_empty_value": true } },
+    { "set": { "field": "server.packets", "copy_from": "destination.packets", "ignore_empty_value": true } },
+
+    { "set": { "field": "network.iana_number", "copy_from": "_kv.proto", "ignore_empty_value": true } },
+    {
+      "script": {
+        "lang": "painless",
+        "ignore_failure": true,
+        "source": "String p = ctx?._kv?.proto; if (p != null) { if (ctx.network == null) ctx.network = new HashMap(); if (p == '6') ctx.network.transport = 'tcp'; else if (p == '17') ctx.network.transport = 'udp'; else if (p == '1') ctx.network.transport = 'icmp'; }"
+      }
+    },
+    { "lowercase": { "field": "_kv.service", "target_field": "network.protocol", "ignore_missing": true } },
+    { "set":       { "field": "network.application", "copy_from": "network.protocol", "ignore_empty_value": true } },
+    {
+      "script": {
+        "lang": "painless",
+        "ignore_failure": true,
+        "source": "long sb = (ctx?.source?.bytes instanceof Number) ? ((Number)ctx.source.bytes).longValue() : 0L; long db = (ctx?.destination?.bytes instanceof Number) ? ((Number)ctx.destination.bytes).longValue() : 0L; long sp = (ctx?.source?.packets instanceof Number) ? ((Number)ctx.source.packets).longValue() : 0L; long dp = (ctx?.destination?.packets instanceof Number) ? ((Number)ctx.destination.packets).longValue() : 0L; if (ctx.network == null) ctx.network = new HashMap(); ctx.network.bytes = sb + db; ctx.network.packets = sp + dp;"
+      }
+    },
+
+    { "set": { "field": "observer.vendor",  "value": "Fortinet" } },
+    { "set": { "field": "observer.product", "value": "FortiGate" } },
+    { "set": { "field": "observer.type",    "value": "firewall" } },
+    { "set": { "field": "observer.name",                       "copy_from": "_kv.devname",  "ignore_empty_value": true } },
+    { "set": { "field": "observer.serial_number",              "copy_from": "_kv.devid",    "ignore_empty_value": true } },
+    { "set": { "field": "observer.ingress.interface.name",     "copy_from": "_kv.srcintf",  "ignore_empty_value": true } },
+    { "set": { "field": "observer.egress.interface.name",      "copy_from": "_kv.dstintf",  "ignore_empty_value": true } },
+
+    { "set": { "field": "event.kind",     "value": "event" } },
+    { "set": { "field": "event.category", "value": ["network"] } },
+    { "set": { "field": "event.dataset",  "value": "fortinet_fortigate.log" } },
+    { "set": { "field": "event.module",   "value": "fortinet_fortigate" } },
+    { "set": { "field": "event.action",   "copy_from": "_kv.action", "ignore_empty_value": true } },
+    { "set": { "field": "event.code",     "copy_from": "_kv.logid",  "ignore_empty_value": true } },
+    { "set": { "field": "log.level",      "copy_from": "_kv.level",  "ignore_empty_value": true } },
+    {
+      "script": {
+        "lang": "painless",
+        "ignore_failure": true,
+        "source": "if (ctx?._dur_sec instanceof Number) { ctx.event = (ctx.event ?: new HashMap()); ctx.event.duration = ((Number)ctx._dur_sec).longValue() * 1000000000L; }"
+      }
+    },
+
+    { "set": { "field": "rule.id",       "copy_from": "_kv.policyid",   "ignore_empty_value": true } },
+    { "set": { "field": "rule.ruleset",  "copy_from": "_kv.policytype", "ignore_empty_value": true } },
+    { "set": { "field": "rule.category", "copy_from": "_kv.appcat",     "ignore_empty_value": true } },
+
+    { "set": { "field": "fortinet.firewall.vd",          "copy_from": "_kv.vd",          "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.type",        "copy_from": "_kv.type",        "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.subtype",     "copy_from": "_kv.subtype",     "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.session_id",  "copy_from": "_kv.sessionid",   "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.trandisp",    "copy_from": "_kv.trandisp",    "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.srcintfrole", "copy_from": "_kv.srcintfrole", "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.dstintfrole", "copy_from": "_kv.dstintfrole", "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.srccountry",  "copy_from": "_kv.srccountry",  "ignore_empty_value": true } },
+    { "set": { "field": "fortinet.firewall.dstcountry",  "copy_from": "_kv.dstcountry",  "ignore_empty_value": true } },
+
+    { "remove": { "field": ["_kv", "_kvstr", "_dur_sec"], "ignore_missing": true } }
+  ],
+  "on_failure": [
+    { "set": { "field": "error.message", "value": "{{{_ingest.on_failure_message}}}" } }
+  ]
+}

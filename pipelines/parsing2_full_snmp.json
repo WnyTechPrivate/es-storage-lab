@@ -1,0 +1,32 @@
+{
+  "description": "parsing2_full_snmp: dissect 12 pipe-separated numeric fields into ECS-shaped fields. Codes only, no human-readable string lookups.",
+  "processors": [
+    {
+      "dissect": {
+        "field": "event.original",
+        "pattern": "%{_ts_ms}|%{_dev}|%{_vendor}|%{_dtype}|%{_dscode}|%{_ifidx}|%{_mcode}|%{_mvalue}|%{_interval}|%{_admin}|%{_oper}|%{_sev}",
+        "ignore_failure": false
+      }
+    },
+
+    { "convert": { "field": "_ts_ms",    "type": "long",  "ignore_missing": true } },
+    { "date":    { "field": "_ts_ms",    "formats": ["UNIX_MS"], "target_field": "@timestamp", "ignore_failure": true } },
+
+    { "convert": { "field": "_dev",      "type": "long", "target_field": "observer.id_num",         "ignore_missing": true } },
+    { "convert": { "field": "_vendor",   "type": "long", "target_field": "observer.vendor_code",    "ignore_missing": true } },
+    { "convert": { "field": "_dtype",    "type": "long", "target_field": "observer.type_code",      "ignore_missing": true } },
+    { "convert": { "field": "_dscode",   "type": "long", "target_field": "event.dataset_code",      "ignore_missing": true } },
+    { "convert": { "field": "_ifidx",    "type": "long", "target_field": "network.interface.index", "ignore_missing": true } },
+    { "convert": { "field": "_mcode",    "type": "long", "target_field": "snmp.metric_code",        "ignore_missing": true } },
+    { "convert": { "field": "_mvalue",   "type": "long", "target_field": "snmp.value",              "ignore_missing": true } },
+    { "convert": { "field": "_interval", "type": "long", "target_field": "snmp.polling.interval_sec","ignore_missing": true } },
+    { "convert": { "field": "_admin",    "type": "long", "target_field": "snmp.if.admin_status",    "ignore_missing": true } },
+    { "convert": { "field": "_oper",     "type": "long", "target_field": "snmp.if.oper_status",     "ignore_missing": true } },
+    { "convert": { "field": "_sev",      "type": "long", "target_field": "event.severity",          "ignore_missing": true } },
+
+    { "remove": { "field": ["_ts_ms","_dev","_vendor","_dtype","_dscode","_ifidx","_mcode","_mvalue","_interval","_admin","_oper","_sev"], "ignore_missing": true } }
+  ],
+  "on_failure": [
+    { "set": { "field": "error.message", "value": "{{{_ingest.on_failure_message}}}" } }
+  ]
+}
